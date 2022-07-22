@@ -63,20 +63,27 @@ BEGIN
 		-- Counter for start-of-block-comment characters - for checking if block comment is ended or not
 		,@noOfBlockCommentChars INT = 0
 		-- Var for indicating if current code is between EXEC or EXECUTE function's brackets
-		,@isInsideExecBrackets INT = 0
+		,@isInsideExecBrackets BIT = 0
+		-- Var for indicating that this particular part of expression calculating dynamic T-SQL will be commented (in-line) when executed
+		,@isDynamicSQLInLineCommented BIT = 0
+		-- Var for indicating that this particular part of expression calculating dynamic T-SQL will be commented (block) when executed
+		,@isDynamicSQLBlockCommented BIT = 0
 		
-	WHILE @currentCharIndex <= len(@definitionCode)
+	WHILE @currentCharIndex <= datalength(@definitionCode)/2
 	BEGIN
 		-- Get another line - from current point to the next CHAR(13)+CHAR(10)
 		SET @nextPosOfNewLine = CHARINDEX(@newlineChars, @definitionCode, @currentCharIndex)
 		SET @lineContent = CASE @nextPosOfNewLine 
-								WHEN 0 THEN SUBSTRING(@definitionCode, @currentCharIndex, len(@definitionCode) - @currentCharIndex + 1)  
+								WHEN 0 THEN SUBSTRING(@definitionCode, @currentCharIndex, datalength(@definitionCode)/2 - @currentCharIndex + 1)  
 								ELSE		SUBSTRING(@definitionCode, @currentCharIndex, @nextPosOfNewLine - @currentCharIndex) 
 							END
 		-- Extract characteristic parts of the code line indicated by the columns of result table
 		-- Parse current line content and update status variables
 		SELECT @currLineIdx = 1, @currLineIdxABS = 1 -- Initialize char index counters
-		WHILE @currLineIdx <= len(@lineContent)
+				,@isCommented = 0 -- beginning of new line end in-line comment
+				-- New line that occurs inside dynamic SQL ends its inline comments; when occurs outside - doesn't have impact 
+				,@isDynamicSQLInLineCommented = CASE @isDynamicSQLExecuted WHEN 1 THEN 0 ELSE @isDynamicSQLInLineCommented END
+		WHILE @currLineIdx <= datalength(@lineContent)/2
 			BEGIN
 				SET @currLineChar = SUBSTRING(@lineContent, @currLineIdx, 1)
 
@@ -91,7 +98,7 @@ BEGIN
 							INSERT INTO @informationTable  
 										VALUES 
 											(@lineNumber
-											,LEFT(@lineContent, @currLineIdx - 1) -- Enter line comment excluding current character
+											,LEFT(@lineContent, @currLineIdx - 1) -- Enter line content excluding current character
 											,@isPartOfString
 											,@isDynamicSQLExecuted
 											,@isInsideExecBrackets
@@ -101,6 +108,9 @@ BEGIN
 				
 						-- Indicate that this is start of plain string
 						SET @isPartOfString = 1
+						-- In case when this is a part of expression which evaluates to dyanmic SQL string, and the previous part
+						-- of the string ended with in-line comment without newline characters, indicate that it is commented
+						SET @isCommented = CASE @isDynamicSQLInLineCommented WHEN 1 THEN 1 ELSE 0 END
 						-- Check if this is an argument for EXEC or EXECUTE function - check if first signs beofore apostrophe are 'EXEC(' or 'EXECUTE('
 						-- Spaces, tabs, carriage returns and line feeds are removed. Checking if result string starts with 'EXECUTE(' or  'EXEC('
 						-- Also it is part of dynamic SQL, when it is inside EXEC brackets - when there is an expression which evaluates to string
@@ -117,18 +127,20 @@ BEGIN
 						-- Define the @lineContent as the rest of the line and initialize @currLineIdx again
 						-- Important to put this after setting variable @codePartToGivenIdx . This statement below manipulates the value of @currLineIdx
 						SELECT 
-							@lineContent = RIGHT(@lineContent, len(@lineContent) - @currLineIdx + 1)
+							@lineContent = RIGHT(@lineContent, datalength(@lineContent)/2 - @currLineIdx + 1)
 							-- Set idx to the second character of line since all line content before EXCLUDING current character was entered into result table
 							,@currLineIdx = 2 
 							,@currLineIdxABS += 1
 					END
 					-- End of case when apostrophe is a start of new plain string
 					-- Case when apostrophe occurs and it is part of other plain string. 
-					ELSE IF @isPartOfString = 1 AND (@isPartOfBlockComment | @isCommented = 0 )
+					ELSE IF (@isPartOfString = 1 AND @isPartOfBlockComment | @isCommented = 0)
+							OR
+							(@isPartOfString = 1 AND @isCommented = 1 AND @isDynamicSQLInLineCommented = 1)
 					BEGIN
 						-- Checking if this is end of plain string. 
 						-- This is end only if next character, that is not a space, carriage return, line feed or tab, is not an apostrophe
-						SET @codePartFromGivenIdx = SUBSTRING(@definitionCode, @currentCharIndex + @currLineIdxABS, len(@definitionCode) - (@currentCharIndex + @currLineIdxABS)+1)
+						SET @codePartFromGivenIdx = SUBSTRING(@definitionCode, @currentCharIndex + @currLineIdxABS, datalength(@definitionCode)/2 - (@currentCharIndex + @currLineIdxABS)+1)
 						SET @codePartFromGivenIdx = REPLACE(REPLACE(REPLACE(REPLACE(@codePartFromGivenIdx, ' ', ''), CHAR(9), ''), CHAR(10), ''), CHAR(13), '')
 					
 						-- Start of case when apostrophe is an end of plain string
@@ -138,7 +150,7 @@ BEGIN
 							INSERT INTO @informationTable  
 								VALUES 
 									(@lineNumber
-									,LEFT(@lineContent, @currLineIdx) -- Enter LineContent including current character
+									,LEFT(@lineContent, @currLineIdx) -- Enter Line Content including current character
 									,@isPartOfString
 									,@isDynamicSQLExecuted
 									,@isInsideExecBrackets
@@ -150,10 +162,11 @@ BEGIN
 							SELECT 
 								@isPartOfString = 0
 								,@isDynamicSQLExecuted = 0
+								,@isCommented = 0 -- In case when it was a dynamic SQL executed string and it ended with in-line comment
 						
 							-- Define the @lineContent as the rest of the line and initialize @currLineIdx again
 							SELECT 
-								@lineContent = RIGHT(@lineContent, len(@lineContent) - @currLineIdx)
+								@lineContent = RIGHT(@lineContent, datalength(@lineContent)/2 - @currLineIdx)
 								,@currLineIdx = 1
 								,@currLineIdxABS += 1
 						END
@@ -176,7 +189,7 @@ BEGIN
 							INSERT INTO @informationTable  
 								VALUES 
 									(@lineNumber
-									,LEFT(@lineContent, @currLineIdx - 1) -- Enter line comment excluding current character
+									,LEFT(@lineContent, @currLineIdx - 1) -- Enter line content excluding current character
 									,@isPartOfString
 									,@isDynamicSQLExecuted
 									,@isInsideExecBrackets
@@ -189,7 +202,7 @@ BEGIN
 							@isDynamicSQLExecuted = 0
 							,@isInsideExecBrackets = 0
 							-- Define the @lineContent as the rest of the line and initialize @currLineIdx again
-							,@lineContent = RIGHT(@lineContent, len(@lineContent) - @currLineIdx + 1)
+							,@lineContent = RIGHT(@lineContent, datalength(@lineContent)/2 - @currLineIdx + 1)
 							-- Set idx to the second character of line since all line content before EXCLUDING current character was entered into result table
 							,@currLineIdx = 2
 							-- Set absolute IDX to the next character, so ABS index points to the same char in original code line as the relative index in new subline
@@ -213,18 +226,18 @@ BEGIN
 						IF @currLineIdx > 1 AND @isPartOfBlockComment = 0 
 						BEGIN
 							INSERT INTO @informationTable  
-										VALUES 
-											(@lineNumber
-											,LEFT(@lineContent, @currLineIdx - 1) -- Enter line comment excluding current character
-											,@isPartOfString
-											,@isDynamicSQLExecuted
-											,@isInsideExecBrackets
-											,@isPartOfBlockComment
-											,@isCommented
-											,'startofblock')
+								VALUES 
+									(@lineNumber
+									,LEFT(@lineContent, @currLineIdx - 1) -- Enter lineContent excluding current character
+									,@isPartOfString
+									,@isDynamicSQLExecuted
+									,@isInsideExecBrackets
+									,@isPartOfBlockComment
+									,@isCommented
+									,'startofblock')
 							-- Define the @lineContent as the rest of the line and initialize @currLineIdx again
 							SELECT 
-								@lineContent = RIGHT(@lineContent, len(@lineContent) - @currLineIdx + 1) 
+								@lineContent = RIGHT(@lineContent, datalength(@lineContent)/2 - @currLineIdx + 1) 
 								,@currLineIdx = 3 -- Set the index behind '/*' characters that are already in the beginning of remaining part of current line
 								,@currLineIdxABS += 2
 						END
@@ -272,7 +285,7 @@ BEGIN
 						
 							-- Define the @lineContent as the rest of the line and initialize @currLineIdx(ABS) again
 							SELECT 
-								@lineContent = RIGHT(@lineContent, len(@lineContent) - @currLineIdx) 
+								@lineContent = RIGHT(@lineContent, datalength(@lineContent)/2 - @currLineIdx) 
 								,@currLineIdx = 1
 								,@currLineIdxABS += 1
 								,@isPartOfBlockComment = 0 -- Indicate that this is no loger block comment
@@ -288,6 +301,72 @@ BEGIN
 						SELECT @currLineIdx += 1, @currLineIdxABS += 1
 				END
 				-- End of case when '*/' occurs.
+				-- Start of case when '--' occurs 
+				IF @currLineChar = '-' AND SUBSTRING(@lineContent, @currLineIdx + 1, 1) = '-'
+				BEGIN
+					-- Case when '--' is functional - beginning of in-line comment
+					IF (@isPartOfString | @isPartOfBlockComment | @isCommented = 0)
+						OR
+					   (@isPartOfString & @isDynamicSQLExecuted = 1 AND @isPartOfBlockComment | @isCommented = 0)
+					BEGIN
+						-- Case when this is outside of dynamic SQL expression
+						IF @isPartOfString | @isPartOfBlockComment | @isCommented = 0
+						BEGIN
+							-- Insert in result table 2 rows - with all the content before '--' and all the content after '--' 
+							IF @currLineIdx > 1 
+								INSERT INTO @informationTable  
+									VALUES 
+										(@lineNumber
+										,LEFT(@lineContent, @currLineIdx - 1) -- Enter line content before current character
+										,@isPartOfString
+										,@isDynamicSQLExecuted
+										,@isInsideExecBrackets
+										,@isPartOfBlockComment
+										,@isCommented
+										,'start_of_inline_comment')
+
+							SELECT @isCommented = 1
+								
+							INSERT INTO @informationTable  
+								VALUES 
+									(@lineNumber
+									,RIGHT(@lineContent, datalength(@lineContent)/2 - @currLineIdx + 1) -- Enter line content from current character to the end
+									,@isPartOfString
+									,@isDynamicSQLExecuted
+									,@isInsideExecBrackets
+									,@isPartOfBlockComment
+									,@isCommented
+									,'inline comment to the end')
+
+							SELECT @currLineIdx = datalength(@lineContent)/2 + 1
+						END
+						--Case When this is inside of dynamic SQL expression
+						ELSE IF @isPartOfString & @isDynamicSQLExecuted = 1 AND @isPartOfBlockComment | @isCommented = 0
+						BEGIN
+							-- Insert in result table 2 rows - with all the content before '--' and all the content after '--' 
+							IF @currLineIdx > 1 
+								INSERT INTO @informationTable  
+									VALUES 
+										(@lineNumber
+										,LEFT(@lineContent, @currLineIdx - 1) -- Enter line content before current character
+										,@isPartOfString
+										,@isDynamicSQLExecuted
+										,@isInsideExecBrackets
+										,@isPartOfBlockComment
+										,@isCommented
+										,'start_of_inline_comment') 
+							SELECT 
+								@lineContent = RIGHT(@lineContent, datalength(@lineContent)/2 - @currLineIdx + 1) 
+								,@currLineIdx = 3 -- Set the index behind '--' characters that are already in the beginning of remaining part of current line
+								,@currLineIdxABS += 2
+								,@isCommented = 1, @isDynamicSQLInLineCommented = 1
+						END
+					END
+					-- End of case when '--' is functional 
+					-- If '--' are NOT functional - just increase current line indexes by 1
+					ELSE
+						SELECT @currLineIdx += 1, @currLineIdxABS += 1
+				END
 				-- Case when other characters occurs
 				ELSE
 					SELECT @currLineIdx += 1, @currLineIdxABS += 1
@@ -308,7 +387,7 @@ BEGIN
 		
 			-- Next starting position is after [CHAR(13) and CHAR(10)] detected
 			SELECT 
-				@currentCharIndex = CASE @nextPosOfNewLine WHEN 0 THEN len(@definitionCode) + 1 ELSE @nextPosOfNewLine + 2 END
+				@currentCharIndex = CASE @nextPosOfNewLine WHEN 0 THEN datalength(@definitionCode)/2 + 1 ELSE @nextPosOfNewLine + 2 END
 				,@lineNumber += 1		
 	END
 	-- End of loop which iterates through all code definition (extracts lines)
