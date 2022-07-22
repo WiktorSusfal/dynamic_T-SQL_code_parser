@@ -188,14 +188,17 @@ BEGIN
 						SELECT 
 							@isDynamicSQLExecuted = 0
 							,@isInsideExecBrackets = 0
+							-- Define the @lineContent as the rest of the line and initialize @currLineIdx again
+							,@lineContent = RIGHT(@lineContent, len(@lineContent) - @currLineIdx + 1)
+							-- Set idx to the second character of line since all line content before EXCLUDING current character was entered into result table
+							,@currLineIdx = 2
+							-- Set absolute IDX to the next character, so ABS index points to the same char in original code line as the relative index in new subline
+							,@currlineIdxABS += 1
 					END
 					-- End of case when ')' is a closing bracket of EXECUTE function running dynamic SQL code
-					-- Define the @lineContent as the rest of the line and initialize @currLineIdx again
-					SELECT 
-						@lineContent = RIGHT(@lineContent, len(@lineContent) - @currLineIdx + 1) 
-						-- Set idx to the second character of line since all line content before EXCLUDING current character was entered into result table
-						,@currLineIdx = 2
-						,@currlineIdxABS += 1
+					-- If this wasn't closig bracket of 'EXEC' function, just increase indexes
+					ELSE
+						SELECT  @currLineIdx += 1, @currlineIdxABS += 1
 				END
 				-- End of case when ')' occurs
 				-- Start of case when '/*' occurs.
