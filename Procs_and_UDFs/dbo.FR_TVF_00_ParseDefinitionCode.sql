@@ -1,5 +1,5 @@
-﻿-- =============================================
--- Author:		Wiktor Susfał
+-- =============================================
+-- Author:		Wiktor Susfa�
 -- Create date: <Create Date,,>
 -- Description:	Table function to parse given source code to table (line by line). Each record refers to particular line (or part of the line) of code. 
 --				Basically, when value of any variable describing the content of code changes, new information is stored in separate row. Rows contains info of:
@@ -144,8 +144,8 @@ BEGIN
 
 					-- If this string was a part of dynamic SQL, and it ended in the middle of in-line comment or regular string, indicate properly
 					SELECT
-						@isDynamicSQLInLineCommented	= CASE @isCommented				WHEN 1 THEN 1 ELSE 0 END
-						,@isDynamicSQLRegularString		= CASE @isPartOfRegularString	WHEN 1 THEN 1 ELSE 0 END 
+						@isDynamicSQLInLineCommented	= CASE @isCommented										WHEN 1 THEN 1 ELSE 0 END
+						,@isDynamicSQLRegularString		= CASE @isPartOfRegularString & @isDynamicSQLExecuted	WHEN 1 THEN 1 ELSE 0 END 
 					-- Indicate that this is end of string
 					SELECT 
 						@isPartOfRegularString = 0
@@ -442,3 +442,6 @@ BEGIN
 	
 	RETURN 
 END
+GO
+
+
