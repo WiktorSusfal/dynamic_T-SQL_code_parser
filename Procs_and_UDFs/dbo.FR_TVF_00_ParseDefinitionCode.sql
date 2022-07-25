@@ -13,7 +13,6 @@
 				-- -IsPartOfBlockComment	BIT - if '1' then the 'LineContent' is a part of block comment. If IsPartOfRegularString = 0 and  IsDynamicSQLExecuted = 0 then the block comment is at the main level of code executed;
 				--								- if IsDynamicSQLExecuted = 1 then 'LineContent' is a part of block comments in dynamic SQL execudet inside code examined
 				-- -IsCommented				BIT - indicate if 'LineContent' is a part of in-line comment (--). The dependencies on 'IsPartOfRegularString'	and 'IsDynamicSQLExecuted' are the same as above
-				-- -DatabaseScope			VARCHAR(50) - database that is in use during executing the 'LineContent'
 -- =============================================
 CREATE FUNCTION [dbo].[FR_TVF_00_ParseDefinitionCode] 
 (
@@ -25,12 +24,11 @@ RETURNS
 	TableKey				INT PRIMARY KEY IDENTITY(1, 1)
 	,LineNumber				INT NOT NULL
 	,LineContent			NVARCHAR(MAX)
-	,IsPartOfRegularString			BIT NOT NULL
+	,IsPartOfRegularString	BIT NOT NULL
 	,IsDynamicSQLExecuted	BIT NOT NULL
 	,InsideExecBrackets     BIT NOT NULL
 	,IsPartOfBlockComment	BIT NOT NULL
 	,IsCommented			BIT NOT NULL
-	,DatabaseScope			VARCHAR(50) NOT NULL
 )
 AS
 BEGIN
@@ -43,7 +41,6 @@ BEGIN
 		,@isInsideExecBrackets BIT = 0
 		,@isPartOfBlockComment BIT = 0
 		,@isCommented BIT = 0
-		,@databaseScope VARCHAR(50)
 		-- Variables used only during parsing source code
 		,@currentCharIndex INT = 1					-- Current char position in examined definition code (@definitionCode parameter)
 		,@newlineChars CHAR(2) = CHAR(13)+CHAR(10)	-- Chars indicating newline in examined code
@@ -104,19 +101,9 @@ BEGIN
 										,@isDynamicSQLExecuted
 										,@isInsideExecBrackets
 										,@isPartOfBlockComment
-										,@isCommented
-										,'startofstring')
+										,@isCommented)
 					
-					/*-- Check if this is dynamic SQL - an argument for EXEC or EXECUTE function - check if first signs beofore apostrophe are 'EXEC(' or 'EXECUTE(' or 'EXEC(N' etc...
-					-- Spaces, tabs, carriage returns and line feeds are removed. Checking if result string starts with 'EXECUTE(' or  'EXEC(' or 'EXEC(N' etc...
-					-- Also it is part of dynamic SQL, when it is inside EXEC brackets - when there is an expression which evaluates to string
-					SET @codePartToGivenIdx = SUBSTRING(@definitionCode, 1, @currentCharIndex + @currLineIdxABS - 2)
-					SET @codePartToGivenIdx = REPLACE(REPLACE(REPLACE(REPLACE(@codePartToGivenIdx, ' ', ''), CHAR(9), ''), CHAR(10), ''), CHAR(13), '')*/
-						
-					--IF RIGHT(@codePartToGivenIdx collate Latin1_General_CI_AI, 5)		= 'EXEC('
-					--	OR RIGHT(@codePartToGivenIdx collate Latin1_General_CI_AI, 6)	= 'EXEC(N'
-					--	OR RIGHT(@codePartToGivenIdx collate Latin1_General_CI_AI, 8)	= 'EXECUTE('
-					--	OR RIGHT(@codePartToGivenIdx collate Latin1_General_CI_AI, 9)	= 'EXECUTE(N'
+					-- Check if this is part of dynamic SQL - an argument for EXEC or EXECUTE function - check if it is inside EXEC brackets
 					IF @isInsideExecBrackets = 1
 						SELECT 
 							@isDynamicSQLExecuted = 1
@@ -153,8 +140,7 @@ BEGIN
 							,@isDynamicSQLExecuted
 							,@isInsideExecBrackets
 							,@isPartOfBlockComment
-							,@isCommented
-							,'endofstring')
+							,@isCommented)
 
 					-- If this string was a part of dynamic SQL, and it ended in the middle of in-line comment or regular string, indicate properly
 					SELECT
@@ -208,8 +194,7 @@ BEGIN
 								,@isDynamicSQLExecuted
 								,@isInsideExecBrackets
 								,@isPartOfBlockComment
-								,@isCommented
-								,'startofstring')
+								,@isCommented)
 
 					-- Define the @lineContent as the rest of the line (starting from ' or N') and update line char indexes
 					SELECT 
@@ -236,8 +221,7 @@ BEGIN
 							,@isDynamicSQLExecuted
 							,@isInsideExecBrackets
 							,@isPartOfBlockComment
-							,@isCommented
-							,'endofstring')
+							,@isCommented)
 
 					-- Indicate that this is end of string inside dynamic SQL
 					SELECT
@@ -280,8 +264,7 @@ BEGIN
 						,@isDynamicSQLExecuted
 						,@isInsideExecBrackets
 						,@isPartOfBlockComment
-						,@isCommented
-						,'endofexec')
+						,@isCommented)
 
 				-- Indicate that this is opening bracket for EXECUTE or EXEC function
 				SELECT 
@@ -309,8 +292,7 @@ BEGIN
 							,@isDynamicSQLExecuted
 							,@isInsideExecBrackets
 							,@isPartOfBlockComment
-							,@isCommented
-							,'endofexec')
+							,@isCommented)
 
 				-- Indicate that this is no longer dynamic SQL and no longer inside EXEC brackets
 				SELECT 
@@ -338,8 +320,7 @@ BEGIN
 							,@isDynamicSQLExecuted
 							,@isInsideExecBrackets
 							,@isPartOfBlockComment
-							,@isCommented
-							,'startofblock')
+							,@isCommented)
 					-- Define the @lineContent as the rest of the line and initialize @currLineIdx again
 					SELECT 
 						@lineContent = RIGHT(@lineContent, datalength(@lineContent)/2 - @currLineIdx + 1) 
@@ -383,8 +364,7 @@ BEGIN
 							,@IsDynamicSQLExecuted
 							,@isInsideExecBrackets
 							,@isPartOfBlockComment
-							,@isCommented
-							,'endofblock')
+							,@isCommented)
 						
 					-- Define the @lineContent as the rest of the line and initialize @currLineIdx(ABS) again
 					SELECT 
@@ -414,8 +394,7 @@ BEGIN
 							,@isDynamicSQLExecuted
 							,@isInsideExecBrackets
 							,@isPartOfBlockComment
-							,@isCommented
-							,'start_of_inline_comment')
+							,@isCommented)
 				
 				-- Update line content variable and others
 				SELECT 
@@ -452,8 +431,7 @@ BEGIN
 							,@isDynamicSQLExecuted
 							,@isInsideExecBrackets
 							,@isPartOfBlockComment
-							,@isCommented
-							,'default')
+							,@isCommented)
 
 		-- Next starting position is after [CHAR(13) and CHAR(10)] detected
 		SELECT 
