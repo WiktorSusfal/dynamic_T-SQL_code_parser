@@ -134,6 +134,14 @@ Output for the execution of procedure in SSMS:
 --------------------
 3
 
+Execution code of main procedure:
+EXECUTE [dbo].[FR_SP_00_AnalyzeSQLCodeOfObjectDefinition] 
+   @codeGivenByObjectName = 'Y'
+   ,@isSQLJob = 'N'
+   ,@objectDatabaseName = 'TEST_DB'
+   ,@objectSchemaName = 'dbo'
+   ,@objectName = 'TEST_SP'
+
 Result table:
 TableKey    LineNumber  LineContent                                     IsPartOfRegularString IsDynamicSQLExecuted InsideExecBrackets IsPartOfBlockComment IsCommented
 ----------- ----------- ----------------------------------------------- --------------------- -------------------- ------------------ -------------------- -----------
