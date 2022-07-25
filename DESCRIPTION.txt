@@ -2,23 +2,21 @@
 The strucuture of result table is as follows:
 Column Name					Description 
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------
--- -TableKey				INT				- autoincremental key - counter for rows in output table
--- -LineNumber				INT 			- number of line in original code where the content stored in 'LineContent' column was found
+-- -TableKey				INT		- autoincremental key - counter for rows in output table
+-- -LineNumber				INT 		- number of line in original code where the content stored in 'LineContent' column was found
 -- -LineContent				NVARCHAR(MAX) 	- content of single line of original code (or part of single line) that can be described 
-												by the values in following columns 
--- -IsPartOfRegularString	BIT 			- if '1' and IsDynamicSQLExecuted = '0' then the 'LineContent' is a part of 
-												plain string written outside of the EXEC function brackets
--- -IsDynamicSQLExecuted	BIT 			- if '1' and IsPartOfRegularString = '0' then the 'LineContent' is a string 
-												that represents code that is being executed inside EXEC functions of this procedure;
-											- if '1' and IsPartOfRegularString = '1' then the 'LineContent' is a string 
-												that represents plain string that is a part of dynamic SQL code
--- -InsideExecBrackets      BIT 			- if '1' then the 'LineContent' is inside EXEC brackets
--- -IsPartOfBlockComment	BIT 			- if '1' then the 'LineContent' is a part of block comment. 
-												If IsPartOfRegularString = 0 and  IsDynamicSQLExecuted = 0 then the block comment is at the main level of code executed;
-											- if IsDynamicSQLExecuted = 1 then 'LineContent' is a part of block comments 
-												in dynamic SQL execudet inside code examined
--- -IsCommented				BIT 			- indicate if 'LineContent' is a part of in-line comment (--). 
-												The dependencies on 'IsPartOfRegularString'	and 'IsDynamicSQLExecuted' are the same as above
+							by the values in following columns 
+-- -IsPartOfRegularString		BIT 		- if '1' and IsDynamicSQLExecuted = '0' then the 'LineContent' is a part of 
+							plain string written outside of the EXEC function brackets
+-- -IsDynamicSQLExecuted		BIT 		- if '1' and IsPartOfRegularString = '0' then the 'LineContent' is a string 
+							that represents code that is being executed inside EXEC functions of this procedure;
+							if '1' and IsPartOfRegularString = '1' then the 'LineContent' is a string 
+							that represents plain string that is a part of dynamic SQL code
+-- -InsideExecBrackets      		BIT 		- if '1' then the 'LineContent' is inside EXEC brackets
+-- -IsPartOfBlockComment		BIT 		- if '1' then the 'LineContent' is a part of block comment. If IsPartOfRegularString = 0 and  									IsDynamicSQLExecuted = 0 then the block comment is at the main level of code executed;
+							if IsDynamicSQLExecuted = 1 then 'LineContent' is a part of block comments inside dynamic SQL execuded
+-- -IsCommented				BIT 		- indicate if 'LineContent' is a part of in-line comment (--). 
+							The dependencies on 'IsPartOfRegularString' and 'IsDynamicSQLExecuted' are the same as above
 
 ######################################################################################################################################################################
 ######################################################################################################################################################################
@@ -32,8 +30,8 @@ SELECT 101 AS Column1, 102 AS Column2 -- SELECT 103 AS Column 3
 
 Output for the code in SSMS:
 Column1		Column2
---------------------
-101			102
+---------------------------
+101		102
 
 Execution code of main procedure:
 EXECUTE [dbo].[FR_SP_00_AnalyzeSQLCodeOfObjectDefinition] 
@@ -118,7 +116,7 @@ Result table:
 CREATE PROCEDURE [dbo].[TEST_SP] 
 AS
 BEGIN
-/* ( '' ' abc ' ''  /* ) /**/*/ EXECUTE(N'Some statement that is not executed')
+/* ( 'a'/* ) /**/*/ EXEC(N'Stat. not executed')
 */ EXEC /* not (' used code -- */ ( /* (-- ) */ -- xyz ( /*/* ) ' 
 N' SELECT 1 -- ' + 'SELECT 2' + ' /*--*/ 
 SELECT 3 ' -- some comment 
@@ -137,28 +135,28 @@ Output for the execution of procedure in SSMS:
 3
 
 Result table:
-TableKey    LineNumber  LineContent                                                                        IsPartOfRegularString IsDynamicSQLExecuted InsideExecBrackets IsPartOfBlockComment IsCommented
------------ ----------- ---------------------------------------------------------------------------------- --------------------- -------------------- ------------------ -------------------- -----------
-1           1           CREATE PROCEDURE [dbo].[TEST_SP]                                                   0                     0                    0                  0                    0
-2           2           AS                                                                                 0                     0                    0                  0                    0
-3           3           BEGIN                                                                              0                     0                    0                  0                    0
-4           4           /* ( '' ' abc ' ''  /* ) /**/*/ EXECUTE(N'Some statement that is not executed')    0                     0                    0                  1                    0
-5           5           */                                                                                 0                     0                    0                  1                    0
-6           5            EXEC                                                                              0                     0                    0                  0                    0
-7           5           /* not (' used code -- */                                                          0                     0                    0                  1                    0
-8           5            (                                                                                 0                     0                    0                  0                    0
-9           5                                                                                              0                     0                    1                  0                    0
-10          5           /* (-- ) */                                                                        0                     0                    1                  1                    0
-11          5                                                                                              0                     0                    1                  0                    0
-12          5           -- xyz ( /*/* ) '                                                                  0                     0                    1                  0                    1
-13          6           N' SELECT 1                                                                        0                     1                    1                  0                    0
-14          6           -- '                                                                               0                     1                    1                  0                    1
-15          6            +                                                                                 0                     0                    1                  0                    0
-16          6           'SELECT 2'                                                                         0                     1                    1                  0                    1
-17          6            +                                                                                 0                     0                    1                  0                    0
-18          6           ' /*--*/                                                                           0                     1                    1                  0                    1
-19          7           SELECT 3 '                                                                         0                     1                    1                  0                    0
-20          7                                                                                              0                     0                    1                  0                    0
-21          7           -- some comment                                                                    0                     0                    1                  0                    1
-22          8           )                                                                                  0                     0                    0                  0                    0
-23          9           END 																			   0                     0                    0                  0                    0
+TableKey    LineNumber  LineContent                                     IsPartOfRegularString IsDynamicSQLExecuted InsideExecBrackets IsPartOfBlockComment IsCommented
+----------- ----------- ----------------------------------------------- --------------------- -------------------- ------------------ -------------------- -----------
+1           1           CREATE PROCEDURE [dbo].[TEST_SP]                0                     0                    0                  0                    0
+2           2           AS                                              0                     0                    0                  0                    0
+3           3           BEGIN                                           0                     0                    0                  0                    0
+4           4           /* ( 'a'/* ) /**/*/ EXEC(N'Stat. not executed') 0                     0                    0                  1                    0
+5           5           */                                              0                     0                    0                  1                    0
+6           5            EXEC                                           0                     0                    0                  0                    0
+7           5           /* not (' used code -- */                       0                     0                    0                  1                    0
+8           5            (                                              0                     0                    0                  0                    0
+9           5                                                           0                     0                    1                  0                    0
+10          5           /* (-- ) */                                     0                     0                    1                  1                    0
+11          5                                                           0                     0                    1                  0                    0
+12          5           -- xyz ( /*/* ) '                               0                     0                    1                  0                    1
+13          6           N' SELECT 1                                     0                     1                    1                  0                    0
+14          6           -- '                                            0                     1                    1                  0                    1
+15          6            +                                              0                     0                    1                  0                    0
+16          6           'SELECT 2'                                      0                     1                    1                  0                    1
+17          6            +                                              0                     0                    1                  0                    0
+18          6           ' /*--*/                                        0                     1                    1                  0                    1
+19          7           SELECT 3 '                                      0                     1                    1                  0                    0
+20          7                                                           0                     0                    1                  0                    0
+21          7           -- some comment                                 0                     0                    1                  0                    1
+22          8           )                                               0                     0                    0                  0                    0
+23          9           END 						0                     0                    0                  0                    0
